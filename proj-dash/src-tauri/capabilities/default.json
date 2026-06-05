@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permisos por defecto: ventana principal + lectura/escritura del JSON local portable.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "fs:default",
+    { "identifier": "fs:allow-read-text-file", "allow": [{ "path": "**" }] },
+    { "identifier": "fs:allow-write-text-file", "allow": [{ "path": "**" }] },
+    { "identifier": "fs:allow-mkdir", "allow": [{ "path": "**" }] },
+    { "identifier": "fs:allow-exists", "allow": [{ "path": "**" }] }
+  ]
+}
