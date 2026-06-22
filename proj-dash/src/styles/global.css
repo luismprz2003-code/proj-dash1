@@ -473,7 +473,7 @@ body {
 /* ---------- Charts ---------- */
 .charts {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr 1.2fr;
   gap: 20px;
 }
 
@@ -514,8 +514,8 @@ body {
 /* ---------- Footer notes ---------- */
 .footer-notes {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
 }
 
 .footer-note {
@@ -675,13 +675,116 @@ body {
   font-size: 13px;
 }
 
-.import-review__campo input[type="number"] {
+.import-review__hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.periodo-selectores {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.periodo-selectores__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.periodo-selectores__field select {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
-  width: 120px;
-  font-size: 14px;
+  font-size: 13px;
+  min-width: 120px;
+  background: #fff;
 }
+
+/* ---------- Datos panel ---------- */
+.datos-panel__sub {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.datos-panel__count {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.datos-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.datos-table th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--border);
+}
+
+.datos-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.datos-table .num {
+  text-align: right;
+}
+
+.datos-table__file {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.datos-table__fecha {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.datos-table__acciones {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.datos-table__confirm {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.btn--sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.btn--danger {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+
+.btn--danger-text {
+  color: var(--red);
+}
+
+.btn--danger-text:hover {
+  background: #fef2f2;
+}
+
 
 .radio-row {
   display: flex;
@@ -708,6 +811,12 @@ body {
   .charts {
     grid-template-columns: 1fr;
   }
+  .footer-notes {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
   .footer-notes {
     grid-template-columns: 1fr;
   }

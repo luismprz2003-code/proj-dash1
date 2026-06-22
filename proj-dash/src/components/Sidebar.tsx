@@ -1,7 +1,8 @@
-export type Seccion = "resumen" | "skus" | "analisis" | "alertas" | "descargas";
+export type Seccion = "resumen" | "datos" | "skus" | "analisis" | "alertas" | "descargas";
 
 const ITEMS: { id: Seccion; label: string; icon: string }[] = [
   { id: "resumen", label: "Resumen", icon: "▦" },
+  { id: "datos", label: "Datos", icon: "▣" },
   { id: "skus", label: "SKUs", icon: "▤" },
   { id: "analisis", label: "Análisis", icon: "￪" },
   { id: "alertas", label: "Alertas", icon: "！" },

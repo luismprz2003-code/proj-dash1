@@ -4,86 +4,72 @@ import {
   CartesianGrid,
   Cell,
   Legend,
-  Line,
-  LineChart,
-  ReferenceArea,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import type { ReactNode } from "react";
-import type { BarraExcedente, PuntoEvolucion } from "../domain/kpis";
-import { fmtDineroCompacto, fmtPct } from "../utils/format";
+import type { BarraSellThru, SegmentoEstatus } from "../domain/kpis";
+import { fmtPct } from "../utils/format";
 
 interface Props {
-  evolucion: PuntoEvolucion[];
-  porFormato: BarraExcedente[];
-  porCategoria: BarraExcedente[];
+  porEstatus: SegmentoEstatus[];
+  porFormato: BarraSellThru[];
 }
 
-const AZUL = "#1e40af";
-const AZUL_CLARO = "#60a5fa";
+const COLORES_ESTATUS: Record<string, string> = {
+  objetivo: "#16a34a",
+  riesgo: "#d97706",
+  critico: "#dc2626",
+};
 
-export function Charts({ evolucion, porFormato, porCategoria }: Props) {
+const AZUL = "#1e40af";
+
+export function Charts({ porEstatus, porFormato }: Props) {
   return (
     <div className="charts">
-      <ChartCard titulo="Evolución de Sell Thru promedio">
-        {evolucion.length === 0 ? (
+      <ChartCard titulo="SKUs por Estatus">
+        {porEstatus.length === 0 ? (
           <ChartEmpty />
         ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={evolucion.map((p) => ({ ...p, pct: p.sellThru * 100 }))}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
-              <ReferenceArea y1={80} y2={85} fill="#dbeafe" fillOpacity={0.5} />
-              <XAxis dataKey="semana" tickFormatter={(s) => `Sem ${s}`} fontSize={12} />
-              <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} fontSize={12} />
-              <Tooltip formatter={(v: number) => fmtPct(v / 100)} labelFormatter={(l) => `Semana ${l}`} />
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie
+                data={porEstatus}
+                dataKey="cantidad"
+                nameKey="etiqueta"
+                cx="50%"
+                cy="50%"
+                innerRadius={55}
+                outerRadius={90}
+                paddingAngle={2}
+                label={({ etiqueta, cantidad }) => `${etiqueta}: ${cantidad}`}
+              >
+                {porEstatus.map((s) => (
+                  <Cell key={s.estatus} fill={COLORES_ESTATUS[s.estatus]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v: number, _n, p) => [`${v} SKUs`, p.payload.etiqueta]} />
               <Legend />
-              <Line
-                type="monotone"
-                dataKey="pct"
-                name="Sell Thru promedio"
-                stroke={AZUL}
-                strokeWidth={2}
-                dot={{ r: 3 }}
-              />
-            </LineChart>
+            </PieChart>
           </ResponsiveContainer>
         )}
       </ChartCard>
 
-      <ChartCard titulo="Excedentes por Formato">
+      <ChartCard titulo="Sell Thru Promedio por Formato">
         {porFormato.length === 0 ? (
           <ChartEmpty />
         ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={porFormato}>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={porFormato.map((p) => ({ ...p, pct: p.sellThru * 100 }))} layout="vertical" margin={{ left: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
-              <XAxis dataKey="nombre" fontSize={12} />
-              <YAxis tickFormatter={fmtDineroCompacto} fontSize={12} />
-              <Tooltip formatter={(v: number) => fmtDineroCompacto(v)} />
-              <Bar dataKey="valor" name="$ en riesgo" fill={AZUL} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        )}
-      </ChartCard>
-
-      <ChartCard titulo="Excedentes por Categoría">
-        {porCategoria.length === 0 ? (
-          <ChartEmpty />
-        ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={porCategoria} layout="vertical" margin={{ left: 24 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
-              <XAxis type="number" tickFormatter={fmtDineroCompacto} fontSize={12} />
-              <YAxis type="category" dataKey="nombre" width={120} fontSize={11} />
-              <Tooltip formatter={(v: number) => fmtDineroCompacto(v)} />
-              <Bar dataKey="valor" name="$ en riesgo" radius={[0, 4, 4, 0]}>
-                {porCategoria.map((_, i) => (
-                  <Cell key={i} fill={i % 2 === 0 ? AZUL : AZUL_CLARO} />
-                ))}
-              </Bar>
+              <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} fontSize={12} />
+              <YAxis type="category" dataKey="nombre" width={72} fontSize={12} />
+              <Tooltip formatter={(v: number) => fmtPct(v / 100)} />
+              <Bar dataKey="pct" name="Sell Thru promedio" fill={AZUL} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}

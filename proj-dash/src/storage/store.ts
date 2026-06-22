@@ -1,18 +1,13 @@
 // ============================================================================
 // STORAGE PORTABLE
-// - Dentro de Tauri (app de escritorio): lee/escribe data/db.json AL LADO del
-//   .exe usando @tauri-apps/plugin-fs. La carpeta data/ la resuelve un comando
-//   de Rust (data_dir). Borrar esa carpeta = se borra todo, sin rastro.
-// - Fuera de Tauri (npm run dev en el navegador, en Mac): usa localStorage,
-//   para poder iterar la UI sin compilar nada nativo.
 // ============================================================================
 
-import { type Database, emptyDatabase } from "../schema/types";
+import { type Database, emptyDatabase, type Snapshot } from "../schema/types";
+import { migrarSemanaLegacy } from "../domain/periodo";
 
 const LS_KEY = "proj-dash:db";
 const DB_FILE = "db.json";
 
-/** Detecta si corremos dentro de la ventana de Tauri. */
 export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -27,7 +22,6 @@ function joinPath(dir: string, file: string): string {
   return dir.endsWith(sep) ? `${dir}${file}` : `${dir}${sep}${file}`;
 }
 
-/** Carga la base de datos desde disco (o localStorage en dev). */
 export async function loadDb(): Promise<Database> {
   try {
     if (isTauri()) {
@@ -48,7 +42,6 @@ export async function loadDb(): Promise<Database> {
   }
 }
 
-/** Guarda la base de datos en disco (o localStorage en dev). */
 export async function saveDb(db: Database): Promise<void> {
   db.meta.updatedAt = new Date().toISOString();
   const text = JSON.stringify(db, null, 2);
@@ -62,18 +55,67 @@ export async function saveDb(db: Database): Promise<void> {
   window.localStorage.setItem(LS_KEY, text);
 }
 
-/** Asegura que un objeto leido tenga la forma minima de Database. */
+function migrarSnapshot(raw: Record<string, unknown>, ref: Date): Snapshot | null {
+  if (!raw || typeof raw !== "object") return null;
+  const itemNbr = String(raw.itemNbr ?? "");
+  if (!itemNbr) return null;
+
+  let periodo = raw.periodo as Snapshot["periodo"] | undefined;
+  if (!periodo || typeof periodo !== "object") {
+    const semanaLegacy = typeof raw.semana === "number" ? raw.semana : 1;
+    periodo = migrarSemanaLegacy(semanaLegacy, ref);
+  }
+
+  return {
+    itemNbr,
+    periodo: {
+      anio: Number(periodo.anio) || ref.getFullYear(),
+      mes: Number(periodo.mes) || 1,
+      semanaMes: Number(periodo.semanaMes) || 1,
+    },
+    bannerCode: String(raw.bannerCode ?? ""),
+    banner: String(raw.banner ?? ""),
+    vendidas: Number(raw.vendidas) || 0,
+    recibido: Number(raw.recibido) || 0,
+    inventarioActual: Number(raw.inventarioActual) || 0,
+    valorInventario: Number(raw.valorInventario) || 0,
+    ventas: Number(raw.ventas) || 0,
+    markdownQty: Number(raw.markdownQty) || 0,
+    markdownValor: Number(raw.markdownValor) || 0,
+    sellThruArchivo:
+      raw.sellThruArchivo === null || raw.sellThruArchivo === undefined
+        ? null
+        : Number(raw.sellThruArchivo),
+    netShipRetail: raw.netShipRetail !== undefined ? Number(raw.netShipRetail) : undefined,
+    tiendasValidas: raw.tiendasValidas !== undefined ? Number(raw.tiendasValidas) : undefined,
+    inventarioTransito:
+      raw.inventarioTransito !== undefined ? Number(raw.inventarioTransito) : undefined,
+    inventarioWhse: raw.inventarioWhse !== undefined ? Number(raw.inventarioWhse) : undefined,
+    inventarioOrden: raw.inventarioOrden !== undefined ? Number(raw.inventarioOrden) : undefined,
+  };
+}
+
 function normalize(obj: unknown): Database {
   const base = emptyDatabase();
   if (!obj || typeof obj !== "object") return base;
-  const o = obj as Partial<Database>;
+  const o = obj as Partial<Database> & { meta?: { semanas?: number[] } };
+  const ref = o.meta?.updatedAt ? new Date(o.meta.updatedAt) : new Date();
+
+  const snapshots: Snapshot[] = [];
+  if (Array.isArray(o.snapshots)) {
+    for (const s of o.snapshots) {
+      const snap = migrarSnapshot(s as Record<string, unknown>, ref);
+      if (snap) snapshots.push(snap);
+    }
+  }
+
   return {
     skus: Array.isArray(o.skus) ? o.skus : [],
-    snapshots: Array.isArray(o.snapshots) ? o.snapshots : [],
+    snapshots,
     meta: {
       updatedAt: o.meta?.updatedAt ?? "",
-      version: o.meta?.version ?? 1,
-      semanas: Array.isArray(o.meta?.semanas) ? o.meta!.semanas : [],
+      version: o.meta?.version ?? 2,
+      importaciones: Array.isArray(o.meta?.importaciones) ? o.meta!.importaciones : [],
     },
   };
 }

@@ -4,6 +4,7 @@
 //  - filas iniciales de basura (ej. "Tabla 1") antes del encabezado real
 //  - acentos / mayusculas / nombres con espacios
 //  - numeros con $, comas de miles, % y espacios
+//  - hoja "Tablero" del Excel Biblia (encabezado ~fila 25)
 // ============================================================================
 
 import * as XLSX from "xlsx";
@@ -18,17 +19,22 @@ const ALIAS: Record<string, string[]> = {
   marca: ["marca", "brand"],
   fineline: ["fineline"],
   finelineDesc: ["fineline desc"],
-  categoria: ["cat", "categoria", "category"],
+  categoria: ["cat", "cat desc", "categoria", "category"],
   formato: ["store type descr", "formato"],
   bannerCode: ["sel store trait"],
   vendidas: ["pos qty"],
   recibido: ["net ship qty"],
+  netShipRetail: ["net ship retail"],
   inventarioActual: ["curr str on hand qty"],
+  inventarioTransito: ["curr str in transit qty"],
+  inventarioWhse: ["curr str in whse qty"],
+  inventarioOrden: ["curr str on order qty"],
   valorInventario: ["curr str on hand retail"],
   ventas: ["pos sales"],
   markdownQty: ["si mumd qty"],
   markdownValor: ["si total mumd"],
   sellThru: ["sellthru", "sell thru"],
+  tiendasValidas: ["curr valid store item comb"],
   proveedor: ["vendor name", "proveedor"],
 };
 
@@ -39,9 +45,14 @@ function esArchivoSoportado(fileName: string): boolean {
   return /\.(csv|xlsx|xls)$/i.test(fileName.trim());
 }
 
+function elegirHoja(wb: XLSX.WorkBook): string {
+  const tablero = wb.SheetNames.find((n) => normalizeKey(n) === "tablero");
+  return tablero ?? wb.SheetNames[0];
+}
+
 /** Busca la fila de encabezados reales (la que contiene "item nbr"). */
 function encontrarFilaEncabezado(matriz: string[][]): number {
-  const limite = Math.min(matriz.length, 25);
+  const limite = Math.min(matriz.length, 40);
   for (let i = 0; i < limite; i++) {
     const fila = matriz[i] ?? [];
     const set = new Set(fila.map(normalizeKey));
@@ -73,7 +84,7 @@ export const csvExcelAdapter: DataAdapter = {
   async obtenerDatos(entrada: EntradaArchivo): Promise<ResultadoAdaptador> {
     const avisos: string[] = [];
     const wb = XLSX.read(new Uint8Array(entrada.arrayBuffer), { type: "array" });
-    const hoja = wb.Sheets[wb.SheetNames[0]];
+    const hoja = wb.Sheets[elegirHoja(wb)];
     if (!hoja) {
       return { filas: [], avisos: ["El archivo no contiene ninguna hoja de datos."] };
     }
@@ -138,11 +149,16 @@ export const csvExcelAdapter: DataAdapter = {
           banner: nombreBanner(bannerCode),
           vendidas: parseNumber(get(fila, "vendidas")),
           recibido: parseNumber(get(fila, "recibido")),
+          netShipRetail: parseNumber(get(fila, "netShipRetail")),
           inventarioActual: parseNumber(get(fila, "inventarioActual")),
+          inventarioTransito: parseNumber(get(fila, "inventarioTransito")),
+          inventarioWhse: parseNumber(get(fila, "inventarioWhse")),
+          inventarioOrden: parseNumber(get(fila, "inventarioOrden")),
           valorInventario: parseNumber(get(fila, "valorInventario")),
           ventas: parseNumber(get(fila, "ventas")),
           markdownQty: parseNumber(get(fila, "markdownQty")),
           markdownValor: parseNumber(get(fila, "markdownValor")),
+          tiendasValidas: parseNumber(get(fila, "tiendasValidas")),
           sellThruArchivo: "sellThru" in mapa ? parsePercent(get(fila, "sellThru")) : null,
         },
       });

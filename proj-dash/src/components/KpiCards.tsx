@@ -6,43 +6,47 @@ interface Props {
 }
 
 export function KpiCards({ kpis }: Props) {
+  const pctRiesgo = kpis.comprasActivas
+    ? kpis.skusEnRiesgo / kpis.comprasActivas
+    : 0;
+
   const cards = [
     {
       icon: "🛒",
       tono: "azul",
-      titulo: "Total compras especiales activas",
+      titulo: "Compras especiales activas",
       valor: fmtNum(kpis.comprasActivas),
       sub: "SKUs",
     },
     {
+      icon: "📋",
+      tono: "morado",
+      titulo: "Chequera del mes",
+      valor: fmtDineroCompacto(kpis.chequeraMes),
+      sub: kpis.comprasChequera
+        ? `${fmtNum(kpis.comprasChequera)} compras activas`
+        : "sin compras registradas",
+    },
+    {
       icon: "📊",
       tono: "verde",
-      titulo: "% Sell Thru promedio",
+      titulo: "Sell Thru promedio",
       valor: fmtPct(kpis.sellThruPromedio),
-      sub: "promedio ponderado",
+      sub: "ventas $ / (inv. retail + ventas $)",
     },
     {
       icon: "⚠️",
       tono: "amarillo",
       titulo: "SKUs en riesgo",
       valor: fmtNum(kpis.skusEnRiesgo),
-      sub: kpis.comprasActivas
-        ? `${fmtPct(kpis.skusEnRiesgo / kpis.comprasActivas, 1)} del total`
-        : "—",
+      sub: kpis.comprasActivas ? `${fmtPct(pctRiesgo, 1)} del total` : "—",
     },
     {
       icon: "💲",
       tono: "rojo",
-      titulo: "$ en riesgo de liquidación",
+      titulo: "Riesgo de liquidación",
       valor: fmtDineroCompacto(kpis.dineroEnRiesgo),
-      sub: "inventario en riesgo",
-    },
-    {
-      icon: "📦",
-      tono: "morado",
-      titulo: "% excedente generado",
-      valor: fmtPct(kpis.excedentePct),
-      sub: "del valor de inventario",
+      sub: "valor retail en riesgo",
     },
   ];
 

@@ -17,7 +17,7 @@ export function SkuTable({ filas, limite }: Props) {
   return (
     <section className="card">
       <header className="card__head">
-        <h2 className="card__title">Seguimiento de SKUs (semáforo)</h2>
+        <h2 className="card__title">Seguimiento de SKUs</h2>
       </header>
 
       {filas.length === 0 ? (
@@ -33,7 +33,7 @@ export function SkuTable({ filas, limite }: Props) {
                 <th>Descripción</th>
                 <th>Categoría</th>
                 <th>Formato</th>
-                <th className="num">Sem</th>
+                <th className="num">Periodo</th>
                 <th className="num">% Sell Thru</th>
                 <th className="num">Inventario</th>
                 <th>Estatus</th>
@@ -88,7 +88,7 @@ function FilaConDetalle({
         <td>{fila.descripcion || "—"}</td>
         <td>{fila.categoria || "—"}</td>
         <td>{fila.formato || "—"}</td>
-        <td className="num">{fila.semana}</td>
+        <td className="num">{fila.periodoLabel}</td>
         <td className="num strong">{fmtPct(fila.sellThru)}</td>
         <td className="num">{fmtNum(fila.inventarioActual)}</td>
         <td>

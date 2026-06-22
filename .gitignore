@@ -1,0 +1,26 @@
+# Dependencias
+node_modules/
+
+# Build frontend (Vite)
+dist/
+
+# Build Tauri / Rust
+src-tauri/target/
+
+# Cache de TypeScript
+*.tsbuildinfo
+
+# Artefactos locales / portables
+*.zip
+portable/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Variables de entorno
+.env
+.env.*
+
+# Archivos de datos pesados (no van al repo)
+*.xlsx

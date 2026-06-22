@@ -8,10 +8,10 @@
 
 import type { Sku, Snapshot } from "../schema/types";
 
-/** Una fila ya normalizada al esquema canonico. La semana se asigna al importar. */
+/** Una fila ya normalizada al esquema canonico. El periodo se asigna al importar. */
 export interface FilaNormalizada {
   sku: Sku;
-  snapshot: Omit<Snapshot, "semana">;
+  snapshot: Omit<Snapshot, "periodo">;
 }
 
 /** Entrada que recibe un adaptador de archivo. */

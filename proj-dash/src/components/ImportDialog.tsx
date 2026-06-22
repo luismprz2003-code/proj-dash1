@@ -1,13 +1,24 @@
-import { useCallback, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { elegirAdaptador } from "../adapters/registry";
 import type { FilaNormalizada } from "../adapters/types";
 import type { ModoImport } from "../domain/merge";
+import {
+  anosDisponibles,
+  periodoLabelLargo,
+  type Periodo,
+} from "../domain/periodo";
+import { PeriodoSelectores } from "./FilterBar";
 
 interface Props {
   abierto: boolean;
-  semanaSugerida: number;
+  periodoSugerido: Periodo;
   onCerrar: () => void;
-  onAplicar: (filas: FilaNormalizada[], semana: number, modo: ModoImport) => void;
+  onAplicar: (
+    filas: FilaNormalizada[],
+    periodo: Periodo,
+    modo: ModoImport,
+    fileName: string
+  ) => void;
 }
 
 type Estado =
@@ -16,12 +27,16 @@ type Estado =
   | { fase: "revisar"; nombre: string; filas: FilaNormalizada[]; avisos: string[] }
   | { fase: "error"; mensaje: string };
 
-export function ImportDialog({ abierto, semanaSugerida, onCerrar, onAplicar }: Props) {
+export function ImportDialog({ abierto, periodoSugerido, onCerrar, onAplicar }: Props) {
   const [estado, setEstado] = useState<Estado>({ fase: "soltar" });
-  const [semana, setSemana] = useState<number>(semanaSugerida);
+  const [periodo, setPeriodo] = useState<Periodo>(periodoSugerido);
   const [modo, setModo] = useState<ModoImport>("acumular");
   const [arrastrando, setArrastrando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (abierto) setPeriodo(periodoSugerido);
+  }, [abierto, periodoSugerido]);
 
   const procesar = useCallback(async (file: File) => {
     const adapter = elegirAdaptador(file.name);
@@ -65,6 +80,8 @@ export function ImportDialog({ abierto, semanaSugerida, onCerrar, onAplicar }: P
     setEstado({ fase: "soltar" });
     onCerrar();
   };
+
+  const anos = anosDisponibles();
 
   return (
     <div className="modal-backdrop" onClick={cerrar}>
@@ -134,13 +151,11 @@ export function ImportDialog({ abierto, semanaSugerida, onCerrar, onAplicar }: P
             )}
 
             <div className="import-review__campo">
-              <label>¿A qué semana corresponde este archivo?</label>
-              <input
-                type="number"
-                min={1}
-                value={semana}
-                onChange={(e) => setSemana(Number(e.target.value) || 1)}
-              />
+              <label>¿A qué periodo corresponde este archivo?</label>
+              <p className="import-review__hint">
+                Semana calendario del mes: días 1–7 = sem 1, 8–14 = sem 2, etc.
+              </p>
+              <PeriodoSelectores periodo={periodo} onCambiar={setPeriodo} anos={anos} />
             </div>
 
             <div className="import-review__campo">
@@ -172,11 +187,11 @@ export function ImportDialog({ abierto, semanaSugerida, onCerrar, onAplicar }: P
               <button
                 className="btn btn--primary"
                 onClick={() => {
-                  onAplicar(estado.filas, semana, modo);
+                  onAplicar(estado.filas, periodo, modo, estado.nombre);
                   cerrar();
                 }}
               >
-                Importar {estado.filas.length} filas a la semana {semana}
+                Importar {estado.filas.length} filas · {periodoLabelLargo(periodo)}
               </button>
             </div>
           </div>

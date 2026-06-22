@@ -1,13 +1,36 @@
 // ============================================================================
 // LOGICA DE DOMINIO: semaforo, KPIs, alertas y datos para graficas.
-// Todo se calcula a partir del esquema canonico + las reglas (config/rules.ts).
+// Formulas alineadas con la Biblia tablero.xlsx (hoja Tablero).
 // ============================================================================
 
-import type { Database, Estatus, Snapshot } from "../schema/types";
-import { rules as defaultRules, type Rules } from "../config/rules";
+import type {
+  ClasificacionSellThru,
+  Database,
+  Distribucion,
+  Estatus,
+  Snapshot,
+} from "../schema/types";
+import {
+  calcPctFormatos,
+  calcSellThruDollar,
+  calcTotalInv,
+  clasificarDistribucion,
+  clasificarSellThru,
+  estatusDeClasificacion,
+  rules as defaultRules,
+  type Rules,
+} from "../config/rules";
+
+import { ultimoPeriodo } from "./importaciones";
+import {
+  periodoIgual,
+  periodoLabel,
+  type Periodo,
+} from "./periodo";
 
 export interface FiltrosTablero {
-  semana: number | "todas";
+  /** "ultimo" = periodo mas reciente importado */
+  periodo: Periodo | "ultimo";
   formato: string | "todos";
   categoria: string | "todas";
   estatus: Estatus | "todos";
@@ -15,32 +38,36 @@ export interface FiltrosTablero {
 }
 
 export const filtrosVacios: FiltrosTablero = {
-  semana: "todas",
+  periodo: "ultimo",
   formato: "todos",
   categoria: "todas",
   estatus: "todos",
   banner: "todos",
 };
 
-/** Fila del semaforo a nivel SKU (suma de banners de esa semana). */
+/** Fila del semaforo a nivel SKU (suma de banners del periodo). */
 export interface FilaSemaforo {
   itemNbr: string;
   descripcion: string;
   fineline: string;
   categoria: string;
   formato: string;
-  semana: number;
+  periodo: Periodo;
+  periodoLabel: string;
   vendidas: number;
   recibido: number;
   inventarioActual: number;
+  totalInv: number;
   valorInventario: number;
-  sellThru: number;        // 0..1, recalculado de unidades
-  objetivoSemana: number;  // 0..1
-  avance: number;          // sellThru / objetivoSemana
+  ventas: number;
+  netShipRetail: number;
+  sellThru: number;
+  pctFormatos: number;
+  distribucion: Distribucion;
+  clasificacion: ClasificacionSellThru;
   estatus: Estatus;
   accion: string;
   proveedor: string;
-  /** Detalle por banner (drill-down). */
   banners: FilaBanner[];
 }
 
@@ -50,74 +77,75 @@ export interface FilaBanner {
   vendidas: number;
   recibido: number;
   inventarioActual: number;
+  totalInv: number;
   valorInventario: number;
+  ventas: number;
   sellThru: number;
-  avance: number;
+  pctFormatos: number;
+  distribucion: Distribucion;
+  clasificacion: ClasificacionSellThru;
   estatus: Estatus;
 }
 
 export interface Kpis {
   comprasActivas: number;
-  sellThruPromedio: number; // 0..1
-  skusEnRiesgo: number;     // riesgo + critico
-  dineroEnRiesgo: number;   // $ de inventario de SKUs en riesgo/critico
-  excedentePct: number;     // 0..1 (markdown / valor inventario)
+  chequeraMes: number;
+  comprasChequera: number;
+  sellThruPromedio: number;
+  skusEnRiesgo: number;
+  dineroEnRiesgo: number;
 }
 
-/** Objetivo de la semana segun la rampa (1a..4a semana). */
-export function objetivoDeSemana(semana: number, r: Rules = defaultRules): number {
-  const techo = r.objetivoDefault;
-  const paso = Math.min(Math.max(semana, 1), r.semanasRampa) / r.semanasRampa;
-  return techo * paso;
+export interface InsightClave {
+  icono: string;
+  titulo: string;
+  texto: string;
 }
 
-/** Calcula sell thru (0..1) a partir de unidades. */
-export function calcSellThru(vendidas: number, recibido: number): number {
-  if (recibido <= 0) return 0;
-  return vendidas / recibido;
+function resolverPeriodo(db: Database, filtros: FiltrosTablero): Periodo | null {
+  if (filtros.periodo !== "ultimo") return filtros.periodo;
+  return ultimoPeriodo(db);
 }
 
-/** Determina estatus del semaforo a partir del avance. */
-export function estatusDeAvance(avance: number, r: Rules = defaultRules): Estatus {
-  if (avance >= r.umbralesAvance.objetivo) return "objetivo";
-  if (avance >= r.umbralesAvance.riesgo) return "riesgo";
-  return "critico";
-}
-
-/** Semanas disponibles en los datos (ordenadas). */
-export function semanasDisponibles(db: Database): number[] {
-  const set = new Set<number>();
-  for (const s of db.snapshots) set.add(s.semana);
-  return [...set].sort((a, b) => a - b);
-}
-
-/** Semana objetivo: la elegida, o la mas reciente si es "todas". */
-function resolverSemana(db: Database, filtros: FiltrosTablero): number | null {
-  if (filtros.semana !== "todas") return filtros.semana;
-  const semanas = semanasDisponibles(db);
-  return semanas.length ? semanas[semanas.length - 1] : null;
+function metricasSnapshot(s: Snapshot, formato: string, r: Rules) {
+  const ventas = s.ventas ?? 0;
+  const valorInv = s.valorInventario ?? 0;
+  const sellThru = calcSellThruDollar(ventas, valorInv);
+  const tiendasValidas = s.tiendasValidas ?? 0;
+  const pctFormatos = calcPctFormatos(tiendasValidas, formato, r);
+  const clasificacion = clasificarSellThru(sellThru, r);
+  return {
+    totalInv: calcTotalInv(
+      s.inventarioActual ?? 0,
+      s.inventarioTransito ?? 0,
+      s.inventarioWhse ?? 0,
+      s.inventarioOrden ?? 0
+    ),
+    sellThru,
+    pctFormatos,
+    distribucion: clasificarDistribucion(pctFormatos, r),
+    clasificacion,
+    estatus: estatusDeClasificacion(clasificacion),
+  };
 }
 
 /**
- * Construye las filas del semaforo a nivel SKU para la semana seleccionada,
- * con drill-down por banner. Aplica los filtros (excepto el de estatus, que se
- * aplica al final porque depende del calculo).
+ * Construye las filas del semaforo a nivel SKU para el periodo seleccionado,
+ * con drill-down por banner.
  */
 export function construirSemaforo(
   db: Database,
   filtros: FiltrosTablero,
   r: Rules = defaultRules
 ): FilaSemaforo[] {
-  const semana = resolverSemana(db, filtros);
-  if (semana === null) return [];
+  const periodo = resolverPeriodo(db, filtros);
+  if (periodo === null) return [];
 
-  const objetivoSemana = objetivoDeSemana(semana, r);
   const skuInfo = new Map(db.skus.map((s) => [s.itemNbr, s]));
 
-  // Agrupa snapshots de esa semana por SKU (y dentro, por banner).
   const porSku = new Map<string, Snapshot[]>();
   for (const s of db.snapshots) {
-    if (s.semana !== semana) continue;
+    if (!periodoIgual(s.periodo, periodo)) continue;
     const arr = porSku.get(s.itemNbr) ?? [];
     arr.push(s);
     porSku.set(s.itemNbr, arr);
@@ -128,7 +156,6 @@ export function construirSemaforo(
   for (const [itemNbr, snaps] of porSku) {
     const info = skuInfo.get(itemNbr);
 
-    // Filtros de catalogo (formato/categoria/banner) antes de agregar.
     if (filtros.formato !== "todos" && info?.formato !== filtros.formato) continue;
     if (filtros.categoria !== "todas" && info?.categoria !== filtros.categoria) continue;
 
@@ -136,19 +163,24 @@ export function construirSemaforo(
       filtros.banner === "todos" ? snaps : snaps.filter((s) => s.banner === filtros.banner);
     if (snapsFiltrados.length === 0) continue;
 
+    const formato = info?.formato ?? "";
+
     const banners: FilaBanner[] = snapsFiltrados.map((s) => {
-      const st = calcSellThru(s.vendidas, s.recibido);
-      const av = objetivoSemana > 0 ? st / objetivoSemana : 0;
+      const m = metricasSnapshot(s, formato, r);
       return {
         bannerCode: s.bannerCode,
         banner: s.banner,
         vendidas: s.vendidas,
         recibido: s.recibido,
         inventarioActual: s.inventarioActual,
+        totalInv: m.totalInv,
         valorInventario: s.valorInventario,
-        sellThru: st,
-        avance: av,
-        estatus: estatusDeAvance(av, r),
+        ventas: s.ventas,
+        sellThru: m.sellThru,
+        pctFormatos: m.pctFormatos,
+        distribucion: m.distribucion,
+        clasificacion: m.clasificacion,
+        estatus: m.estatus,
       };
     });
 
@@ -156,24 +188,34 @@ export function construirSemaforo(
     const recibido = sum(snapsFiltrados, (s) => s.recibido);
     const inventarioActual = sum(snapsFiltrados, (s) => s.inventarioActual);
     const valorInventario = sum(snapsFiltrados, (s) => s.valorInventario);
-    const sellThru = calcSellThru(vendidas, recibido);
-    const avance = objetivoSemana > 0 ? sellThru / objetivoSemana : 0;
-    const estatus = estatusDeAvance(avance, r);
+    const ventas = sum(snapsFiltrados, (s) => s.ventas);
+    const netShipRetail = sum(snapsFiltrados, (s) => s.netShipRetail ?? 0);
+    const totalInv = sum(banners, (b) => b.totalInv);
+    const sellThru = calcSellThruDollar(ventas, valorInventario);
+    const tiendasValidas = sum(snapsFiltrados, (s) => s.tiendasValidas ?? 0);
+    const pctFormatos = calcPctFormatos(tiendasValidas, formato, r);
+    const clasificacion = clasificarSellThru(sellThru, r);
+    const estatus = estatusDeClasificacion(clasificacion);
 
     filas.push({
       itemNbr,
       descripcion: info?.descripcion ?? "",
       fineline: [info?.fineline, info?.finelineDesc].filter(Boolean).join(" - "),
       categoria: info?.categoria ?? "",
-      formato: info?.formato ?? "",
-      semana,
+      formato,
+      periodo,
+      periodoLabel: periodoLabel(periodo),
       vendidas,
       recibido,
       inventarioActual,
+      totalInv,
       valorInventario,
+      ventas,
+      netShipRetail,
       sellThru,
-      objetivoSemana,
-      avance,
+      pctFormatos,
+      distribucion: clasificarDistribucion(pctFormatos, r),
+      clasificacion,
       estatus,
       accion: r.acciones[estatus],
       proveedor: info?.proveedor ?? "",
@@ -184,7 +226,7 @@ export function construirSemaforo(
   const conEstatus =
     filtros.estatus === "todos" ? filas : filas.filter((f) => f.estatus === filtros.estatus);
 
-  return conEstatus.sort((a, b) => a.avance - b.avance);
+  return conEstatus.sort((a, b) => a.sellThru - b.sellThru);
 }
 
 /** KPIs de las tarjetas superiores. */
@@ -192,24 +234,24 @@ export function calcularKpis(filas: FilaSemaforo[]): Kpis {
   if (filas.length === 0) {
     return {
       comprasActivas: 0,
+      chequeraMes: 0,
+      comprasChequera: 0,
       sellThruPromedio: 0,
       skusEnRiesgo: 0,
       dineroEnRiesgo: 0,
-      excedentePct: 0,
     };
   }
-  const vendidas = sum(filas, (f) => f.vendidas);
-  const recibido = sum(filas, (f) => f.recibido);
+
   const enRiesgo = filas.filter((f) => f.estatus !== "objetivo");
-  const valorTotal = sum(filas, (f) => f.valorInventario);
-  const dineroEnRiesgo = sum(enRiesgo, (f) => f.valorInventario);
+  const conCompra = filas.filter((f) => f.recibido > 0 || f.netShipRetail > 0);
 
   return {
     comprasActivas: filas.length,
-    sellThruPromedio: calcSellThru(vendidas, recibido),
+    chequeraMes: sum(conCompra, (f) => f.netShipRetail),
+    comprasChequera: conCompra.length,
+    sellThruPromedio: promedio(filas.map((f) => f.sellThru)),
     skusEnRiesgo: enRiesgo.length,
-    dineroEnRiesgo,
-    excedentePct: valorTotal > 0 ? dineroEnRiesgo / valorTotal : 0,
+    dineroEnRiesgo: sum(enRiesgo, (f) => f.valorInventario),
   };
 }
 
@@ -221,44 +263,92 @@ export function construirAlertas(filas: FilaSemaforo[]) {
   };
 }
 
+/** Insights dinamicos para el footer (4 bullets). */
+export function construirInsights(filas: FilaSemaforo[], kpis: Kpis): InsightClave[] {
+  if (filas.length === 0) {
+    return [
+      {
+        icono: "ℹ️",
+        titulo: "Sin datos",
+        texto: "Importa un archivo CSV o Excel para ver insights del tablero.",
+      },
+    ];
+  }
+
+  const pctRiesgo = kpis.comprasActivas
+    ? (kpis.skusEnRiesgo / kpis.comprasActivas) * 100
+    : 0;
+  const mejor = [...filas].sort((a, b) => b.sellThru - a.sellThru)[0];
+  const peor = filas[0];
+
+  return [
+    {
+      icono: "📊",
+      titulo: "Sell Thru promedio",
+      texto: `El sell thru promedio del periodo es ${(kpis.sellThruPromedio * 100).toFixed(1)}%, calculado como ventas $ ÷ (inventario retail + ventas $).`,
+    },
+    {
+      icono: "⚠️",
+      titulo: "SKUs en riesgo",
+      texto: `${kpis.skusEnRiesgo} SKUs (${pctRiesgo.toFixed(1)}%) requieren acción: promoción o markdown según su clasificación.`,
+    },
+    {
+      icono: "💲",
+      titulo: "Riesgo de liquidación",
+      texto: `$${(kpis.dineroEnRiesgo / 1_000_000).toFixed(2)}M en inventario retail de SKUs en riesgo o críticos.`,
+    },
+    {
+      icono: "🎯",
+      titulo: "Extremos del periodo",
+      texto: `Mejor: ${mejor.descripcion || mejor.itemNbr} (${(mejor.sellThru * 100).toFixed(0)}%). Peor: ${peor.descripcion || peor.itemNbr} (${(peor.sellThru * 100).toFixed(0)}%).`,
+    },
+  ];
+}
+
 // ---- Datos para graficas -----------------------------------------------------
 
-export interface PuntoEvolucion {
-  semana: number;
-  sellThru: number; // 0..1
+export interface SegmentoEstatus {
+  estatus: Estatus;
+  etiqueta: string;
+  cantidad: number;
 }
 
-/** Evolucion de sell thru promedio por semana (todas las semanas de la base). */
-export function evolucionSellThru(db: Database, r: Rules = defaultRules): PuntoEvolucion[] {
-  void r;
-  const semanas = semanasDisponibles(db);
-  return semanas.map((semana) => {
-    const snaps = db.snapshots.filter((s) => s.semana === semana);
-    const vendidas = sum(snaps, (s) => s.vendidas);
-    const recibido = sum(snaps, (s) => s.recibido);
-    return { semana, sellThru: calcSellThru(vendidas, recibido) };
-  });
-}
-
-export interface BarraExcedente {
-  nombre: string;
-  valor: number;
-}
-
-/** Excedente ($ en riesgo) agrupado por una clave del SKU (formato o categoria). */
-export function excedentePorClave(
+/** Conteo de SKUs por estatus para el donut. */
+export function semaforoPorEstatus(
   filas: FilaSemaforo[],
-  clave: "formato" | "categoria"
-): BarraExcedente[] {
-  const mapa = new Map<string, number>();
+  r: Rules = defaultRules
+): SegmentoEstatus[] {
+  const mapa = new Map<Estatus, number>();
   for (const f of filas) {
-    if (f.estatus === "objetivo") continue;
-    const k = (f[clave] || "Otros").toString();
-    mapa.set(k, (mapa.get(k) ?? 0) + f.valorInventario);
+    mapa.set(f.estatus, (mapa.get(f.estatus) ?? 0) + 1);
+  }
+  const orden: Estatus[] = ["objetivo", "riesgo", "critico"];
+  return orden
+    .filter((e) => (mapa.get(e) ?? 0) > 0)
+    .map((e) => ({
+      estatus: e,
+      etiqueta: r.etiquetas[e],
+      cantidad: mapa.get(e) ?? 0,
+    }));
+}
+
+export interface BarraSellThru {
+  nombre: string;
+  sellThru: number;
+}
+
+/** Sell thru promedio por formato (barras horizontales). */
+export function sellThruPorFormato(filas: FilaSemaforo[]): BarraSellThru[] {
+  const mapa = new Map<string, number[]>();
+  for (const f of filas) {
+    const k = f.formato || "Otros";
+    const arr = mapa.get(k) ?? [];
+    arr.push(f.sellThru);
+    mapa.set(k, arr);
   }
   return [...mapa.entries()]
-    .map(([nombre, valor]) => ({ nombre, valor }))
-    .sort((a, b) => b.valor - a.valor);
+    .map(([nombre, vals]) => ({ nombre, sellThru: promedio(vals) }))
+    .sort((a, b) => b.sellThru - a.sellThru);
 }
 
 // ---- util --------------------------------------------------------------------
@@ -267,4 +357,9 @@ function sum<T>(arr: T[], fn: (x: T) => number): number {
   let t = 0;
   for (const x of arr) t += fn(x);
   return t;
+}
+
+function promedio(vals: number[]): number {
+  if (vals.length === 0) return 0;
+  return sum(vals, (v) => v) / vals.length;
 }
