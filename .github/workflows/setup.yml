@@ -1,0 +1,73 @@
+name: Compilar Windows (portable)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: proj-dash
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v4
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependencias del frontend
+        run: npm install
+
+      - name: Generar iconos (sin binarios en el repo)
+        run: |
+          node scripts/gen-icon.mjs
+          npx tauri icon assets/icon-source.png
+
+      - name: Instalar Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache de Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: proj-dash/src-tauri
+
+      - name: Compilar la app (Tauri)
+        uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: proj-dash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Armar el ZIP portable (.exe + carpeta data)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path src-tauri/target/release -Filter *.exe -File |
+            Where-Object { $_.Name -notmatch 'setup|installer|uninstall' } |
+            Select-Object -First 1
+          if (-not $exe) { throw "No se encontro el .exe compilado" }
+          New-Item -ItemType Directory -Force -Path portable/data | Out-Null
+          Copy-Item $exe.FullName -Destination "portable/$($exe.Name)"
+          "Carpeta de datos portable. Borrar esta carpeta = se borra todo." | Out-File -FilePath portable/data/LEEME.txt -Encoding utf8
+          Compress-Archive -Path portable/* -DestinationPath TableroSellThru-portable.zip -Force
+
+      - name: Subir el ZIP portable (descargable)
+        uses: actions/upload-artifact@v4
+        with:
+          name: TableroSellThru-portable
+          path: proj-dash/TableroSellThru-portable.zip
+          if-no-files-found: error
+
+      - name: Subir el instalador NSIS (alternativa)
+        uses: actions/upload-artifact@v4
+        with:
+          name: TableroSellThru-instalador
+          path: proj-dash/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: warn
